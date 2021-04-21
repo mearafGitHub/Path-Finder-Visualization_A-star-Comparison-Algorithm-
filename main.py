@@ -1,180 +1,236 @@
 import pygame
+import math
+from queue import PriorityQueue
 
-CLOSED_COLOR = (55, 0, 200)
-OPEN_COLOR = (0, 255, 0)
-YELLOW = (255, 255, 0)
-BACKGROUND_COLOR = (255, 255, 255)
-BARRIER_COLOR = (0, 0, 0)
-PATH_COLOR = (128, 0, 128)
-START_COLOR = (255, 165, 0)
-GREY = (128, 128, 128)
-END_COLOR = (64, 224, 208)
-SCREEN_WIDTH = 800
-WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_WIDTH))
-pygame.display.set_caption(" Path Finder Using A* Search Algo ")
+WIDTH = 480  # (2rows*10) -4rows
+WIN = pygame.display.set_mode((WIDTH, WIDTH))
+pygame.display.set_caption("Path Finder Auto Game (A* Algorithm)")
 
+DARKGRAY, LINEGRAY, BLACK, WHITE, PURPLE, ORANGE, GREY, INDIGO = (128, 128, 128), (80, 80, 80), (0, 0, 0), (200, 200, 200), (205, 50, 255), (205, 105, 0), (100, 100, 100), (64, 0, 208)
 
 class Locate:
-    def __init__(self, row, column, width, total_rows):
-        self.row = row
-        self.column = column
-        self.x = row * width
-        self.y = column * width
-        self.color = BACKGROUND_COLOR
-        self.neighbors = []
-        self.width = width
-        self.total_rows = total_rows
+	def __init__(self, row, column, width, total_rows):
+		self.row = row
+		self.column = column
+		self.x = row * width
+		self.y = column * width
+		self.color = BLACK
+		self.neighbors = []
+		self.width = width
+		self.total_rows = total_rows
 
-    def __lt__(self, other):
-        return False
+	def get_pos(self):
+		return self.row, self.column
 
-    def get_position(self):
-        return self.row, self.column
+	def is_closed(self):
+		return self.color == DARKGRAY
 
-    def draw(self, win):
-        pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
+	def is_open(self):
+		return self.color == LINEGRAY
 
-    def make_start_node(self):
-        self.color = START_COLOR
+	def is_barrier(self):
+		return self.color == WHITE
 
-    def make_closed(self):
-        self.color = CLOSED_COLOR
+	def is_start(self):
+		return self.color == ORANGE
 
-    def make_open(self):
-        self.color = OPEN_COLOR
+	def is_end(self):
+		return self.color == INDIGO
 
-    def make_barrier_node(self):
-        self.color = BARRIER_COLOR
+	def reset(self):
+		self.color = BLACK
 
-    def make_end_node(self):
-        self.color = END_COLOR
+	def make_start(self):
+		self.color = ORANGE
 
-    def make_path(self):
-        self.color = PATH_COLOR
+	def make_closed(self):
+		self.color = DARKGRAY
 
-    def is_closed(self):
-        return self.color == CLOSED_COLOR
+	def make_open(self):
+		self.color = LINEGRAY
 
-    def is_open(self):
-        return self.color == OPEN_COLOR
+	def make_barrier(self):
+		self.color = WHITE
 
-    def is_barrier_node(self):
-        return self.color == BARRIER_COLOR
+	def make_end(self):
+		self.color = INDIGO
 
-    def is_start_node(self):
-        return self.color == START_COLOR
+	def make_path(self):
+		self.color = PURPLE
 
-    def is_end_node(self):
-        return self.color == END_COLOR
+	def draw(self, win):
+		pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
 
-    def reset(self):
-        self.color = BACKGROUND_COLOR
+	def update_neighbors(self, grid):
+		self.neighbors = []
+		if self.row < self.total_rows - 1 and not grid[self.row + 1][self.column].is_barrier(): # DOWN
+			self.neighbors.append(grid[self.row + 1][self.column])
 
-    # SAVE ALL FOUR NEIGHBOURS IF THEY ARE NOT BARRIERS TO THE START NODE
-    def update_neighbors(self, grid):
-        self.neighbors = []
-        # NEIGHBOUR ABOVE
-        if self.row > 0 and not grid[self.row - 1][self.column].is_barrier():
-            self.neighbors.append(grid[self.row - 1][self.column])
-        # NEIGHBOUR LEFT
-        if self.column > 0 and not grid[self.row][self.column - 1].is_barrier():
-            self.neighbors.append(grid[self.row][self.column - 1])
-        # NEIGHBOUR BELOW
-        if self.row < self.total_rows - 1 and not grid[self.row + 1][self.column].is_barrier():
-            self.neighbors.append(grid[self.row + 1][self.column])
-        # NEIGHBOUR RIGHT
-        if self.column < self.total_rows - 1 and not grid[self.row][self.column + 1].is_barrier():
-            self.neighbors.append(grid[self.row][self.column + 1])
+		if self.row > 0 and not grid[self.row - 1][self.column].is_barrier(): # UP
+			self.neighbors.append(grid[self.row - 1][self.column])
+
+		if self.column < self.total_rows - 1 and not grid[self.row][self.column + 1].is_barrier(): # RIGHT
+			self.neighbors.append(grid[self.row][self.column + 1])
+
+		if self.column > 0 and not grid[self.row][self.column - 1].is_barrier(): # LEFT
+			self.neighbors.append(grid[self.row][self.column - 1])
+
+	def __lt__(self, other):
+		return False
 
 
-def click_position(position, rows, width):
-    space = width // rows
-    y, x = position
-    row = y // space
-    column = x // space
-    return row, column
+def h_score(p1, p2):
+	x1, y1 = p1
+	x2, y2 = p2
+	return abs(x1 - x2) + abs(y1 - y2)
+
+
+def reconstruct_path(came_from, current, draw):
+	while current in came_from:
+		current = came_from[current]
+		current.make_path()
+		draw()
+
+
+def path_finder(draw, grid, start, end):
+	count = 0
+	open_set = PriorityQueue()
+	open_set.put((0, count, start))
+	latest= {}
+	g_score = {node: float("inf") for row in grid for node in row}
+	g_score[start] = 0
+	f_score = {node: float("inf") for row in grid for node in row}
+	f_score[start] = h_score(start.get_pos(), end.get_pos())
+
+	hash_set = {start}
+
+	while not open_set.empty():
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				pygame.quit()
+
+		current = open_set.get()[2]
+		hash_set.remove(current)
+
+		if current == end:
+			reconstruct_path(latest, end, draw)
+			end.make_end()
+			return True
+
+		for neighbor in current.neighbors:
+			temp_g_score = g_score[current] + 1
+
+			if temp_g_score < g_score[neighbor]:
+				latest[neighbor] = current
+				g_score[neighbor] = temp_g_score
+				f_score[neighbor] = temp_g_score + h_score(neighbor.get_pos(), end.get_pos())
+				if neighbor not in hash_set:
+					count += 1
+					open_set.put((f_score[neighbor], count, neighbor))
+					hash_set.add(neighbor)
+					neighbor.make_open()
+
+		draw()
+
+		if current != start:
+			current.make_closed()
+
+	return False
 
 
 def make_grid(rows, width):
-    grid = []
-    space = width // rows
-    for x in range(rows):
-        grid.append([])
-        for y in range(rows):
-            node = Locate(x, y, space, rows)
-            grid[x].append(node)
+	grid = []
+	gap = width // rows
+	for i in range(rows):
+		grid.append([])
+		for j in range(rows):
+			node = Locate(i, j, gap, rows)
+			grid[i].append(node)
 
-    return grid
-
-
-def draw_grid(window, rows, width):
-    space = width // rows
-    for n in range(rows):
-        pygame.draw.line(window, GREY, (0, n * space), (width, n * space))
-        for s in range(rows):
-            pygame.draw.line(window, GREY, (s * space, 0), (s * space, width))
+	return grid
 
 
-def draw(window, grid, rows, width):
-    window.fill(BACKGROUND_COLOR)
-    for row in grid:
-        for node in row:
-            node.draw(window)
-            draw_grid(window, rows, width)
-            pygame.display.update()
+def draw_grid(win, rows, width):
+	gap = width // rows
+	for i in range(rows):
+		pygame.draw.line(win, GREY, (0, i * gap), (width, i * gap))
+		for j in range(rows):
+			pygame.draw.line(win, GREY, (j * gap, 0), (j * gap, width))
 
 
-def path_finder_algo(param, grid, start_node, end_node):
-    pass
+def draw(win, grid, rows, width):
+	win.fill(BLACK)
+
+	for row in grid:
+		for spot in row:
+			spot.draw(win)
+
+	draw_grid(win, rows, width)
+	pygame.display.update()
 
 
-def main(window, width):
-    ROWS = 50
-    grid = make_grid(ROWS, width)
-    play = True
-    start_node = None
-    end_node = None
-    while play:
-        draw(window, grid, ROWS, width)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                play = False
-            if pygame.mouse.get_pressed()[0]:
-                # Left Mouse draws barrier, start and end node
-                position = pygame.mouse.get_pos()
-                row, column = click_position(position, ROWS, width)
-                locate = grid[row][column]
-                if not start_node and locate != end_node:
-                    start_node = locate
-                    start_node.make_start_node()
-                elif locate != end_node and locate != start_node:
-                    locate.make_barrier_node()
-                elif end_node and locate != start_node:
-                    end_node = locate
-                    end_node.make_end_node()
+def get_clicked_pos(pos, rows, width):
+	gap = width // rows
+	y, x = pos
 
-            elif pygame.mouse.get_pressed()[2]:
-                # reset when right clicked
-                position = pygame.mouse.get_pos()
-                row, column = click_position(position)
-                locate = grid[row][column]
-                locate.reset()
-                if locate == start_node:
-                    start_node = None
-                elif locate == end_node:
-                    end_node = None
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE and start_node and end_node:
-                    for row in grid:
-                        for node in row:
-                            node.update_neighbours(grid)
-                  #  path_finder_algo(lambda: draw(window, grid, ROWS, width), grid, start_node, end_node)
-                if event.key == pygame.K_c:
-                    start_node = None
-                    end_node = None
-                    grid = make_grid(ROWS, width)
+	row = y // gap
+	col = x // gap
 
-    pygame.quit()
+	return row, col
 
 
-main(WINDOW, SCREEN_WIDTH)
+def main(win, width):
+	ROWS = 30
+	grid = make_grid(ROWS, width)
+
+	start = None
+	end = None
+
+	run = True
+	while run:
+		draw(win, grid, ROWS, width)
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				run = False
+
+			if pygame.mouse.get_pressed()[0]: # LEFT
+				pos = pygame.mouse.get_pos()
+				row, col = get_clicked_pos(pos, ROWS, width)
+				spot = grid[row][col]
+				if not start and spot != end:
+					start = spot
+					start.make_start()
+
+				elif not end and spot != start:
+					end = spot
+					end.make_end()
+
+				elif spot != end and spot != start:
+					spot.make_barrier()
+
+			elif pygame.mouse.get_pressed()[2]: # RIGHT
+				pos = pygame.mouse.get_pos()
+				row, col = get_clicked_pos(pos, ROWS, width)
+				spot = grid[row][col]
+				spot.reset()
+				if spot == start:
+					start = None
+				elif spot == end:
+					end = None
+
+			if event.type == pygame.KEYDOWN:
+				if event.key == pygame.K_SPACE and start and end:
+					for row in grid:
+						for spot in row:
+							spot.update_neighbors(grid)
+
+					path_finder(lambda: draw(win, grid, ROWS, width), grid, start, end)
+
+				if event.key == pygame.K_c:
+					start = None
+					end = None
+					grid = make_grid(ROWS, width)
+
+	pygame.quit()
+
+main(WIN, WIDTH)
