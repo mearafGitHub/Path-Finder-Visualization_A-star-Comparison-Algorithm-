@@ -1,5 +1,4 @@
 import pygame
-import math
 from queue import PriorityQueue
 
 WIDTH = 480  # (2rows*10) -4rows
