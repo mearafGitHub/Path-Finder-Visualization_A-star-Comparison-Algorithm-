@@ -1,9 +1,4 @@
 import pygame
-# import math
-
-SCREEN_WIDTH = 400
-WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_WIDTH))
-pygame.display.set_caption(" Path Finder Using A* Search Algo ")
 
 CLOSED_COLOR = (55, 0, 200)
 OPEN_COLOR = (0, 255, 0)
@@ -14,6 +9,9 @@ PATH_COLOR = (128, 0, 128)
 START_COLOR = (255, 165, 0)
 GREY = (128, 128, 128)
 END_COLOR = (64, 224, 208)
+SCREEN_WIDTH = 400
+WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_WIDTH))
+pygame.display.set_caption(" Path Finder Using A* Search Algo ")
 
 
 class Locate:
@@ -26,6 +24,9 @@ class Locate:
         self.neighbors = []
         self.width = width
         self.total_rows = total_rows
+
+    def __lt__(self, other):
+        return False
 
     def get_position(self):
         return self.row, self.column
@@ -68,3 +69,21 @@ class Locate:
 
     def reset(self):
         self.color = BACKGROUND_COLOR
+
+    def update_neighbors(self, grid):
+        self.neighbors = []
+        # NEIGHBOUR ABOVE
+        if self.row > 0 and not grid[self.row - 1][self.column].is_barrier():
+            self.neighbors.append(grid[self.row - 1][self.column])
+
+        # NEIGHBOUR LEFT
+        if self.column > 0 and not grid[self.row][self.column - 1].is_barrier():
+            self.neighbors.append(grid[self.row][self.column - 1])
+
+        # NEIGHBOUR BELOW
+        if self.row < self.total_rows - 1 and not grid[self.row + 1][self.column].is_barrier():
+            self.neighbors.append(grid[self.row + 1][self.column])
+
+        # NEIGHBOUR RIGHT
+        if self.column < self.total_rows - 1 and not grid[self.row][self.column + 1].is_barrier():
+            self.neighbors.append(grid[self.row][self.column + 1])
